@@ -1,0 +1,8 @@
+pybaseball
+sqlalchemy
+flask
+flask-restful
+python-dotenv
+pytest
+metabase-api  # Python client for Metabase API
+requests
