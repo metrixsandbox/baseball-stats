@@ -1,11 +1,16 @@
 version: '3'
 services:
+  api:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env.example
+
   metabase:
     image: metabase/metabase:latest
     ports:
       - "3000:3000"
-    volumes:
-      - ./baseball_stats.db:/baseball_stats.db
     environment:
       MB_DB_FILE: /baseball_stats.db
       MB_DB_TYPE: sqlite
