@@ -6,9 +6,12 @@ setup(
     packages=find_packages(),
     install_requires=[
         'flask',
+        'flask-restful',
         'sqlalchemy',
         'pybaseball',
         'python-dotenv',
-        'pandas'
+        'pandas',
+        'requests',
+        'metabase-api',
     ],
 )
