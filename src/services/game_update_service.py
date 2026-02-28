@@ -43,6 +43,8 @@ class GameUpdateService:
             self.session.rollback()
             print(f"Error updating after game: {e}")
             return False
+        finally:
+            self.session.close()
 
     def _update_team_stats(self, game_data):
         """Update team statistics after a game."""

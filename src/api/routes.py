@@ -13,7 +13,7 @@ def get_latest_stats():
     try:
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-        
+
         stats = fetch_stats(start_date, end_date)
         processed_stats = process_stats(stats)
         return jsonify(processed_stats.to_dict(orient='records')), 200
@@ -22,8 +22,8 @@ def get_latest_stats():
 
 @api_bp.route('/players', methods=['GET'])
 def get_players():
+    session = get_session()
     try:
-        session = get_session()
         players = session.query(Player).all()
         return jsonify([{
             'id': p.id,
@@ -36,11 +36,13 @@ def get_players():
         } for p in players]), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
 
 @api_bp.route('/stats/player/<int:player_id>', methods=['GET'])
 def get_player_stats(player_id):
+    session = get_session()
     try:
-        session = get_session()
         stats = session.query(SeasonStats).filter_by(player_id=player_id).all()
         return jsonify([{
             'year': s.year,
@@ -51,31 +53,33 @@ def get_player_stats(player_id):
         } for s in stats]), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
 
 @api_bp.route('/stats/team/<team_name>', methods=['GET'])
 def get_team_stats(team_name):
+    session = get_session()
     try:
         year = request.args.get('year', 2025)  # Default to 2025
-        session = get_session()
-        
+
         # Get team stats
         team_stats = session.query(TeamStats).filter_by(
             team_name=team_name,
             year=year
         ).first()
-        
+
         if not team_stats:
             return jsonify({"error": "Team stats not found"}), 404
-            
+
         # Get team players
         players = session.query(Player).filter_by(team=team_name[:3].upper()).all()
-        
+
         # Get recent games
         recent_games = session.query(Game).filter(
-            ((Game.home_team == team_name[:3].upper()) | 
+            ((Game.home_team == team_name[:3].upper()) |
              (Game.away_team == team_name[:3].upper()))
         ).order_by(Game.date.desc()).limit(5).all()
-        
+
         return jsonify({
             "team_stats": {
                 "name": team_stats.team_name,
@@ -108,7 +112,7 @@ def get_team_stats(team_name):
                 "away_team": game.away_team,
                 "home_score": game.home_team_score,
                 "away_score": game.away_team_score,
-                "result": "W" if 
+                "result": "W" if
                     (game.home_team == team_name[:3].upper() and game.home_team_score > game.away_team_score) or
                     (game.away_team == team_name[:3].upper() and game.away_team_score > game.home_team_score)
                     else "L"
@@ -116,13 +120,15 @@ def get_team_stats(team_name):
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
 
 @api_bp.route('/dashboard/braves', methods=['POST'])
 def create_braves_dashboard():
     try:
         metabase = MetabaseService()
         dashboard_id = metabase.create_braves_dashboard()
-        
+
         if dashboard_id:
             return jsonify({
                 "message": "Braves dashboard created successfully",
@@ -136,70 +142,72 @@ def create_braves_dashboard():
 
 @api_bp.route('/report/team/<team_name>', methods=['GET'])
 def get_team_report(team_name):
+    session = get_session()
     try:
         year = request.args.get('year', 2025)
-        session = get_session()
-        
+
         # Get team stats
         team_stats = session.query(TeamStats).filter_by(
             team_name=team_name,
             year=year
         ).first()
-        
+
         if not team_stats:
             return jsonify({"error": "Team stats not found"}), 404
-        
+
         # Get recent games
         recent_games = session.query(Game).filter(
-            ((Game.home_team == team_name[:3].upper()) | 
+            ((Game.home_team == team_name[:3].upper()) |
              (Game.away_team == team_name[:3].upper()))
         ).order_by(Game.date.desc()).limit(5).all()
-        
+
         # Calculate recent performance
-        recent_wins = sum(1 for g in recent_games if 
+        recent_wins = sum(1 for g in recent_games if
             (g.home_team == team_name[:3].upper() and g.home_team_score > g.away_team_score) or
             (g.away_team == team_name[:3].upper() and g.away_team_score > g.home_team_score))
-        
+
         # Generate narrative report
         report = {
             "summary": f"The {team_stats.team_name} are currently {team_stats.wins}-{team_stats.losses} " +
                       f"and ranked {team_stats.division_rank}{'st' if team_stats.division_rank == 1 else 'th'} in their division. " +
                       f"They have won {recent_wins} of their last {len(recent_games)} games.",
-            
+
             "offense": f"The team is batting {team_stats.team_batting_avg:.3f} with {team_stats.team_home_runs} home runs " +
                       f"and {team_stats.team_runs_scored} runs scored this season.",
-            
+
             "pitching": f"The pitching staff has posted a {team_stats.team_era:.2f} ERA with {team_stats.team_strikeouts} " +
                       f"strikeouts and a {team_stats.team_whip:.2f} WHIP. The bullpen has recorded {team_stats.team_saves} saves.",
-            
+
             "recent_performance": "Recent games:\n" + "\n".join([
                 f"{g.date}: {g.away_team} {g.away_team_score} @ {g.home_team} {g.home_team_score}"
                 for g in recent_games
             ])
         }
-        
+
         return jsonify(report), 200
-        
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
 
 @api_bp.route('/games/update', methods=['POST'])
 def update_game():
     try:
         game_data = request.json
         required_fields = ['date', 'home_team', 'away_team', 'home_score', 'away_score']
-        
+
         # Validate required fields
         if not all(field in game_data for field in required_fields):
             return jsonify({
                 "error": "Missing required fields",
                 "required": required_fields
             }), 400
-            
+
         # Update database with game results
         update_service = GameUpdateService()
         success = update_service.update_after_game(game_data)
-        
+
         if success:
             return jsonify({
                 "message": "Game data updated successfully",
@@ -210,6 +218,6 @@ def update_game():
             }), 200
         else:
             return jsonify({"error": "Failed to update game data"}), 500
-            
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
